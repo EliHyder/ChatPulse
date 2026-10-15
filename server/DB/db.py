@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from DB.models import Base, User, Message
@@ -37,12 +37,13 @@ def init_db():
     Base.metadata.create_all(bind=engine)
 
 def hash_password(password: str) -> str:
-    """Gera o hash seguro da senha antes de salvar no banco."""
-    return pwd_context.hash(password)
+    # Garante que é string e corta caso ultrapasse o limite de segurança do bcrypt
+    safe_password = str(password)[:72]
+    return pwd_context.hash(safe_password)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Compara a senha digitada pelo usuário com o hash salvo no banco."""
-    return pwd_context.verify(plain_password, hashed_password)
+    safe_password = str(plain_password)[:72]
+    return pwd_context.verify(safe_password, hashed_password)
 
 def create_user(db, name: str, email: str, password: str):
     """
@@ -73,6 +74,15 @@ def verify_user(db, email: str, password: str):
     if not verify_password(password, user.password):
         raise ValueError("Invalid password.")
     return user
+
+def find_user_by_email(db, email: str):
+    """
+    Localiza um usuário pelo email sem diferenciar maiúsculas de minúsculas.
+    """
+    try:
+        return db.query(User).filter(func.lower(User.email) == email.lower()).first()
+    except SQLAlchemyError as e:
+        raise RuntimeError(f"Error retrieving user: {str(e)}")
 
 def create_message(db, sender_id: int, recipient_id: int, body: str):
     """
@@ -122,4 +132,3 @@ def get_message_send_receive(db, sender_id: int, recipient_id: int):
         }
     except SQLAlchemyError as e:
         raise RuntimeError(f"Error retrieving messages: {str(e)}")
-
